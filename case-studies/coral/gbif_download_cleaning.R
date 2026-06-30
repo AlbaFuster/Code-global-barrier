@@ -74,9 +74,6 @@ gbif_zip <- occ_download_get(download_key, path = "data_gbif/")
 dat_raw <- occ_download_import(gbif_zip, path = "./data_gbif/")
 
 ## ---------------------------------------------------------
-## 4. Basic cleaning
-## ---------------------------------------------------------
-## ---------------------------------------------------------
 ## 4. Basic cleaning + tropical coral regions
 ## ---------------------------------------------------------
 
