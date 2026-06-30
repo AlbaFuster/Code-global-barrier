@@ -1,0 +1,24 @@
+Package: mobie
+Title: Modifying Ocean Barriers for INLA on Earth
+Version: 0.0.1
+Authors@R: person(given = "Alba", family = "Fuster", role = c("aut", "cre"), email = "alba.fuster1398@gmail.com")
+Description: A Shiny app to create, edit, visualise, and export global ocean and land barrier polygons and spherical meshes for INLA barrier SPDE models.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: R (>= 4.1.0)
+Imports:
+    shiny,
+    leaflet,
+    leaflet.extras,
+    sf,
+    rnaturalearth,
+    spdep,
+    tools,
+    units,
+    s2,
+    INLA,
+    INLAspacetime,
+    fmesher,
+    inlabru

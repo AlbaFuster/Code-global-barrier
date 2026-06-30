@@ -1,0 +1,5 @@
+---
+title: "MOBIE"
+---
+
+MOBIE is a Shiny app for editing ocean barrier polygons and building spherical meshes for INLA workflows.
