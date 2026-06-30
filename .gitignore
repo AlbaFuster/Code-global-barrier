@@ -5,3 +5,14 @@
 .DS_Store
 *.RData
 *.geojson
+
+# Large local data files
+*.csv
+*.RData
+*.rds
+*.zip
+data/
+data-raw/*.csv
+data-raw/*.RData
+case-studies/**/data/
+case-studies/**/outputs/

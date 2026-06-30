@@ -1,79 +1,87 @@
 # MOBIE
 
-**MOBIE** (**Mo**difying Ocean **B**arriers for **I**NLA on **E**arth) is an R package that provides an interactive Shiny application for creating, editing and exporting global land barriers for barrier SPDE models.
+MOBIE stands for **Modifying Ocean Barriers for INLA on Earth**.
 
-The application was developed to simplify the creation of global barrier geometries and spherical meshes used in spatial analyses with INLA. MOBIE combines interactive editing tools with mesh generation, barrier classification and local correlation diagnostics in a single workflow.
+It is a Shiny app for building and editing global barrier polygons, creating spherical meshes, checking barrier triangles, and exporting outputs for INLA barrier-SPDE workflows.
 
-## Main features
+The app is kept close to the original script. The main code is in:
 
-MOBIE allows users to:
-
-- Build a default global land barrier from Natural Earth country polygons.
-- Import existing barriers from GeoJSON, GeoPackage or zipped shapefiles.
-- Edit barrier polygons interactively on a Leaflet map.
-- Generate spherical meshes for barrier SPDE models.
-- Classify mesh triangles as barrier or non-barrier.
-- Explore local correlation patterns of the barrier SPDE model.
-- Export edited barriers, meshes and application settings.
-
-## Installation
-
-Install the development version directly from GitHub:
-
-```r
-remotes::install_github("AlbaFuster/Code-global-barrier")
+```text
+inst/app/app.R
 ```
 
-## Run the application
+This makes it easier to compare with the working script and avoids changing the behaviour while moving the project to GitHub.
 
-After installation, launch MOBIE with:
+## Run the app
+
+Open the project in RStudio, then run:
 
 ```r
-library(mobie)
+devtools::load_all()
 run_mobie()
 ```
 
-## Dependencies
+You can also run the app directly:
 
-MOBIE relies on several R packages for interactive applications, spatial data handling and barrier-SPDE modelling. The main dependencies are:
+```r
+shiny::runApp("inst/app")
+```
 
-- **shiny**
-- **leaflet** and **leaflet.extras**
-- **sf**
-- **rnaturalearth**
-- **INLA**
-- **INLAspacetime**
-- **fmesher**
-- **inlabru**
-- **spdep**
-- **s2**
-- **units**
+## Install packages
+
+The app needs these R packages:
+
+```r
+install.packages(c(
+  "shiny",
+  "leaflet",
+  "leaflet.extras",
+  "sf",
+  "rnaturalearth",
+  "spdep",
+  "units",
+  "s2",
+  "fmesher",
+  "inlabru"
+))
+```
+
+INLA is installed from the INLA repository:
+
+```r
+install.packages(
+  "INLA",
+  repos = c(getOption("repos"), INLA = "https://inla.r-inla-download.org/R/stable"),
+  dep = TRUE
+)
+```
+
+If `INLAspacetime` is not available from your normal repositories, install it from its source repository or the same setup you used for the original script.
+
+## What the app does
+
+- Load a barrier polygon from GeoJSON, JSON, GPKG, or zipped shapefile.
+- Build a default world land barrier.
+- Simplify and edit the barrier on a Leaflet map.
+- Build a spherical mesh.
+- Classify barrier triangles.
+- Plot local barrier-SPDE correlation diagnostics.
+- Export the edited barrier and mesh outputs.
 
 ## Project structure
 
-```
-.
-├── R/                  Package functions
-├── inst/
-│   └── app/            Shiny application
+```text
+mobie/
 ├── DESCRIPTION
-├── LICENSE
+├── NAMESPACE
 ├── README.md
-└── NAMESPACE
+├── R/
+│   └── run_mobie.R
+└── inst/
+    └── app/
+        └── app.R
 ```
 
-The Shiny application is located in `inst/app`, while the package provides a simple launcher function (`run_mobie()`) that starts the application after installation.
+## Notes
 
-## Future developments
-
-MOBIE is under active development and new functionality will be added in future releases. Planned improvements include additional tools for barrier editing, mesh construction and support for new spatial modelling workflows.
-
-## Author
-
-**Alba Fuster**
-
-Institut de Ciències del Mar (ICM-CSIC)
-
-## License
-
-This project is distributed under the MIT License.
+The app uses `fmesher::fmesher_globe_points()` through `library(fmesher)`. This is loaded explicitly because the original app calls the function directly.
