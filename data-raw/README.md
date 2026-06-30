@@ -2,7 +2,7 @@
 
 Large datasets are not stored in this repository.
 
-The case studies require external input files such as cleaned GBIF data, FishGlob data, and MOBIE exports. These files should be stored locally or shared through a data repository such as Zenodo, OSF or Figshare.
+The case studies require external input files such as cleaned GBIF data, FishGlob data, and MOBIE exports. These files will be shared through a data repository.
 
 Suggested local use:
 
@@ -13,5 +13,3 @@ data-raw/
 ├── barrier_polygon_YYYY-MM-DD.geojson
 └── MOBIE_mesh_YYYY-MM-DD.RData
 ```
-
-If files are stored elsewhere, update the paths in the case-study scripts.
