@@ -32,7 +32,7 @@
 
 
 # ==============================================================================
-# 1. Libraries
+# 1. Libraries ====
 # ==============================================================================
 
 # Core Shiny framework for building the web application.
@@ -80,7 +80,7 @@ library(inlabru)
 
 
 # ==============================================================================
-# 2. Global options and constants
+# 2. Global options and constants ====
 # ==============================================================================
 
 # Allow large uploads, for example zipped shapefiles or high-resolution GeoJSONs.
@@ -109,7 +109,7 @@ EARTH_CIRCUMFERENCE_KM <- 36080.2
 
 
 # ==============================================================================
-# 3. General geometry helper functions
+# 3. General geometry helper functions ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -223,7 +223,7 @@ as_sf_geometry <- function(x) {
 
 
 # ==============================================================================
-# 4. File input helper
+# 4. File input helper ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -283,8 +283,84 @@ read_polygon_file <- function(file) {
 }
 
 
+# ------------------------------------------------------------------------------
+# lnglat_polygon()
+# ------------------------------------------------------------------------------
+# Purpose:
+#   Build a polygon in EPSG:4326 from Leaflet coordinates, which can lie outside
+#   [-180, 180] when the user pans across the antimeridian. The ring is shifted
+#   by whole turns into [-180, 180] and split at the dateline if it crosses it.
+# ------------------------------------------------------------------------------
+lnglat_polygon <- function(lng, lat) {
+  lng <- lng - 360 * floor((min(lng) + 180) / 360)
+  geom <- st_sfc(st_polygon(list(cbind(lng, lat))), crs = CRS_LONG_LAT)
+  
+  if (max(lng) > 180) {
+    geom <- st_wrap_dateline(geom, options = "WRAPDATELINE=YES")
+  }
+  
+  geom
+}
+
+
+# ------------------------------------------------------------------------------
+# normalize_longitude()
+# ------------------------------------------------------------------------------
+# Purpose:
+#   Wrap longitudes (e.g. from Leaflet clicks) into [-180, 180).
+# ------------------------------------------------------------------------------
+normalize_longitude <- function(lng) {
+  ((lng + 180) %% 360) - 180
+}
+
+
+# ------------------------------------------------------------------------------
+# shift_polygons_for_display()
+# ------------------------------------------------------------------------------
+# Purpose:
+#   Re-express polygons on a 0-360 longitude axis so that a Pacific-centred map
+#   shows the Pacific without a seam at 180 degrees.
+#
+# Why not st_shift_longitude():
+#   It shifts vertices naively and mangles polygons that straddle 0 degrees
+#   (e.g. Africa). Here the polygons are cut at 0 first, and only the western
+#   half is translated by +360.
+# ------------------------------------------------------------------------------
+shift_polygons_for_display <- function(x) {
+  geom <- st_geometry(x)
+  
+  half_box <- function(xmin, xmax) {
+    st_as_sfc(
+      st_bbox(
+        c(xmin = xmin, ymin = -90, xmax = xmax, ymax = 90),
+        crs = CRS_LONG_LAT
+      )
+    )
+  }
+  
+  east <- suppressWarnings(st_intersection(geom, half_box(0, 180)))
+  west <- suppressWarnings(st_intersection(geom, half_box(-180, 0)))
+  west <- st_sfc(west + c(360, 0), crs = CRS_LONG_LAT)
+  
+  st_sf(
+    geometry = st_union(c(st_geometry(east), st_geometry(west)))
+  )
+}
+
+
+# ------------------------------------------------------------------------------
+# shift_points_for_display()
+# ------------------------------------------------------------------------------
+# Purpose:
+#   Move negative longitudes of sf points onto the 0-360 axis.
+# ------------------------------------------------------------------------------
+shift_points_for_display <- function(x) {
+  st_shift_longitude(x)
+}
+
+
 # ==============================================================================
-# 5. Leaflet drawing helper
+# 5. Leaflet drawing helper ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -314,7 +390,7 @@ leaflet_feature_to_sf <- function(feature) {
     lng <- vapply(coords, function(x) x[[1]], numeric(1))
     lat <- vapply(coords, function(x) x[[2]], numeric(1))
     
-    geom <- st_polygon(list(cbind(lng, lat)))
+    geom <- lnglat_polygon(lng, lat)
     
   } else if (geom_type == "MultiPolygon") {
     
@@ -324,22 +400,22 @@ leaflet_feature_to_sf <- function(feature) {
       lng <- vapply(coords, function(x) x[[1]], numeric(1))
       lat <- vapply(coords, function(x) x[[2]], numeric(1))
       
-      st_polygon(list(cbind(lng, lat)))
+      lnglat_polygon(lng, lat)
     })
     
-    geom <- st_multipolygon(polygons)
+    geom <- st_union(do.call(c, polygons))
     
   } else {
     
     stop("Only Polygon and MultiPolygon geometries are supported.")
   }
   
-  st_sf(geometry = st_sfc(geom, crs = CRS_LONG_LAT))
+  st_sf(geometry = validate_geometry(geom))
 }
 
 
 # ==============================================================================
-# 6. Barrier construction
+# 6. Barrier construction ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -424,7 +500,7 @@ build_default_world_barrier <- function(
 
 
 # ==============================================================================
-# 7. Spherical mesh construction
+# 7. Spherical mesh construction ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -554,7 +630,7 @@ build_spherical_mesh <- function(
 
 
 # ==============================================================================
-# 8. Local correlation diagnostic
+# 8. Local correlation diagnostic ====
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -709,7 +785,7 @@ build_correlation_grid <- function(
 
 
 # ==============================================================================
-# 9. User interface
+# 9. User interface ====
 # ==============================================================================
 
 ui <- navbarPage(
@@ -722,6 +798,19 @@ ui <- navbarPage(
     sidebarLayout(
       
       sidebarPanel(
+        
+        # ----------------------------------------------------------------------
+        # 0. Center on Ocean
+        # ----------------------------------------------------------------------
+        h4("0. Center on Ocean"),
+        
+        radioButtons(
+          inputId  = "ocean_name",
+          label    = "Choose which ocean to center your map:",
+          choices  = c("Pacific", "Atlantic"), 
+          selected = "Pacific"),
+        
+        hr(),
         
         # ----------------------------------------------------------------------
         # 1. Barrier source
@@ -1107,9 +1196,12 @@ server <- function(input, output, session) {
     
     leaflet(options = leafletOptions(worldCopyJump = FALSE)) %>%
       
-      addProviderTiles("CartoDB.Positron") %>%
+      # JP edit: 20261103. This map keeps asking for an API key? So swapped it
+      # addProviderTiles("CartoDB.Positron") %>%
+      addProviderTiles("Esri.WorldGrayCanvas") %>%
       
-      setView(lng = 0, lat = 20, zoom = 2) %>%
+      
+      setView(lng = 200, lat = 0, zoom = 2) %>%
       
       addDrawToolbar(
         targetGroup = "drawn",
@@ -1140,6 +1232,17 @@ server <- function(input, output, session) {
   })
   
   
+  # Re-centre the map via a proxy so existing layers are not lost.
+  observeEvent(input$ocean_name, {
+    lng <- if (input$ocean_name == "Pacific") 200 else 0
+    leafletProxy("map") %>%
+      setView(lng = lng, lat = 0, zoom = 2)
+    
+    # Redraw layers on the longitude axis that matches the new centre.
+    refresh_map()
+  }, ignoreInit = TRUE)
+  
+  
   # ---------------------------------------------------------------------------
   # refresh_map()
   # ---------------------------------------------------------------------------
@@ -1153,6 +1256,18 @@ server <- function(input, output, session) {
   
   refresh_map <- function() {
     
+    # Pacific-centred maps use a 0-360 longitude axis for display only; all
+    # stored geometry stays in [-180, 180].
+    pacific <- identical(input$ocean_name, "Pacific")
+    
+    to_poly_display <- function(x) {
+      if (pacific) shift_polygons_for_display(x) else x
+    }
+    
+    to_points_display <- function(x) {
+      if (pacific) shift_points_for_display(x) else x
+    }
+    
     proxy <- leafletProxy("map") %>%
       clearGroup("barrier") %>%
       clearGroup("drawn") %>%
@@ -1165,7 +1280,7 @@ server <- function(input, output, session) {
     if (!is.null(barrier())) {
       proxy <- proxy %>%
         addPolygons(
-          data = barrier(),
+          data = to_poly_display(barrier()),
           group = "barrier",
           fillOpacity = 0.35,
           color = "#1f78b4",
@@ -1179,7 +1294,7 @@ server <- function(input, output, session) {
     if (!is.null(drawn_polygon())) {
       proxy <- proxy %>%
         addPolygons(
-          data = drawn_polygon(),
+          data = to_poly_display(drawn_polygon()),
           group = "drawn",
           fillOpacity = 0.35,
           color = "#e67e22",
@@ -1195,8 +1310,8 @@ server <- function(input, output, session) {
       md <- mesh_data()
       
       tri <- md$tri_centers_ll
-      tri_ocean <- tri[!tri$inside_barrier, ]
-      tri_barrier <- tri[tri$inside_barrier, ]
+      tri_ocean <- to_points_display(tri[!tri$inside_barrier, ])
+      tri_barrier <- to_points_display(tri[tri$inside_barrier, ])
       
       if (nrow(tri_ocean) > 0) {
         proxy <- proxy %>%
@@ -1230,6 +1345,12 @@ server <- function(input, output, session) {
       
       all_corr <- corr_grids()
       
+      if (pacific) {
+        west <- all_corr$lon < 0
+        all_corr$xmin[west] <- all_corr$xmin[west] + 360
+        all_corr$xmax[west] <- all_corr$xmax[west] + 360
+      }
+      
       pal <- colorNumeric(
         palette = "YlOrRd",
         domain = all_corr$correlation
@@ -1259,7 +1380,7 @@ server <- function(input, output, session) {
     if (!is.null(corr_points())) {
       proxy <- proxy %>%
         addCircleMarkers(
-          data = corr_points(),
+          data = to_points_display(corr_points()),
           group = "correlation point",
           radius = 7,
           color = "white",
@@ -1518,16 +1639,17 @@ server <- function(input, output, session) {
     corr_counter(id)
     
     click <- input$map_click
+    click_lng <- normalize_longitude(click$lng)
     
     locs_ll <- matrix(
-      c(click$lng, click$lat),
+      c(click_lng, click$lat),
       ncol = 2,
       byrow = TRUE
     )
     
     selected_point <- st_as_sf(
       data.frame(
-        lon = click$lng,
+        lon = click_lng,
         lat = click$lat,
         corr_id = id
       ),
@@ -1719,7 +1841,7 @@ server <- function(input, output, session) {
   )
 
 # ---------------------------------------------------------------------------
-# Download parameters txt
+# Download parameters txt ----
 # ---------------------------------------------------------------------------
 
 output$download_parameters_txt <- downloadHandler(
@@ -1971,7 +2093,7 @@ output$download_parameters_txt <- downloadHandler(
 }
 
 # ==============================================================================
-# 11. Run app
+# 11. Run app ====
 # ==============================================================================
 
 shinyApp(ui, server)
